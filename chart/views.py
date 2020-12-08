@@ -6,13 +6,12 @@ import json
 
 
 def home(request):
-    # return HttpResponse('코로나19 시각화 (준비 중)')
     dump = covid_dump()
     return render(request, 'chart/covid19.html', {'chart': dump,}, )
 
 
 def load_data():
-    # Section 2 - 데이터 적재 및 특정 국가 데이터 선별
+    # 데이터 적재 및 특정 국가 데이터 선별합니다.
     df = pd.read_csv(
         'https://raw.githubusercontent.com/datasets/covid-19/master/data/countries-aggregated.csv',
         parse_dates=['Date'])
@@ -20,54 +19,52 @@ def load_data():
 
 
 def select_countries(df):
-    # 분석 대상 국가에 해당하는 행만 선별
+    # 분석 대상 국가에 해당하는 행만 선별합니다.
     countries = ['Korea, South', 'Germany', 'United Kingdom', 'US', 'France']  # 분석 대상 국가 리스트
     df = df[df['Country'].isin(countries)]
     return df, countries
 
 
 def sum_cases(df):
-    # Section 3 - 합계 열 계산
-    # df['Cases'] = df[['Confirmed', 'Recovered', 'Deaths']].sum(axis=1)  # (확진자, 회복자, 사망자) 합계
-    # df['Cases'] = df[['Deaths']].sum(axis='columns')   # 사망자 수치만 합계에 포함
-    df['Cases'] = df[['Confirmed']].sum(axis='columns')  # 확진자 수치만 합계에 포함
+    # 확진자 수치 합계 열 계산합니다.
+    df['Cases'] = df[['Confirmed']].sum(axis='columns')
     return df
 
 
 def reshape(df):
-    # Section 4 - 데이터 구조 재편
+    # 데이터 구조 재편합니다.
     covid = df.pivot(index='Date', columns='Country', values='Cases')
-    # 필요한 특정 열만 columns로 지정하면, 해결됨
+    # 필요한 특정 열만 columns로 지정하면 해결됩니다.
     covid.columns = covid.columns.to_list()  # 분석 대상 국가 리스트
     return covid
 
 
 def read_population(countries):
-    # 인구 데이터 읽어오기
+    # 인구 데이터 읽어온 것을 pop에 저장합니다.
     pop = pd.read_csv(
         'https://datahub.io/JohnSnowLabs/population-figures-by-country/r/population-figures-by-country-csv.csv')
-    # 분석 대상 국가에서 국가 이름과 2016년도 인구 데이터만 추출
+    # 분석 대상 국가에서 국가 이름과 2016년도 인구 데이터만 추출합니다.
     pop = pop[
         pop['Country'].isin(countries)  # 코로나 데이터와 인구 데이터에서 국가명이 동일한 경우
         |  # 또는
         pop['Country'].isin(['United States', 'Korea, Rep.'])  # 코로나 데이터와 인구 데이터에서 국가명이 상이한 경우
-        ][['Country', 'Year_2016']]  # 국가 이름 열과 2016년도 인구 데이터 열만 추출
-    # 인구 데이터의 국가 이름을 코로나 데이터 기준으로 변경
+        ][['Country', 'Year_2016']]  # 국가 이름 열과 2016년도 인구 데이터 열만 추출합니다.
+    # 인구 데이터의 국가 이름을 코로나 데이터 기준으로 변경합니다.
     pop = pop.replace({'United States': 'US', 'Korea, Rep.': 'Korea, South'})
-    # Country 열을 인덱스로 설정
+    # Country 열을 인덱스로 설정합니다.
     pop.set_index(['Country'], inplace=True)
-    # 사전으로 변환
+    # 사전으로 변환시킵니다.
     pop = pop.to_dict()
-    # 필요한 인구 데이터만 사전으로 추출
+    # 필요한 인구 데이터만 사전으로 추출합니다.
     populations = pop['Year_2016']
     return populations
 
 
 def per_capita(covid, populations):
-    # Section 5 - 십만명당 비율 계산
+    # 백만명당 비율을 계산합니다.
     percapita = covid.copy()
     for country in list(percapita.columns):
-        percapita[country] = (percapita[country] / populations[country] * 100000).round(2)
+        percapita[country] = (percapita[country] / populations[country] * 1000000).round(2)
     return percapita
 
 
@@ -82,8 +79,6 @@ def make_my_data(percapita):
         my_dict['country'] = country
         my_dict['series'] = my_series
         my_data.append(my_dict)
-    # for my_d in my_data:
-    #     print(my_d['country'], my_d['series'], '\n')
     print(list(map(
         lambda entry: {'name': entry['country'], 'data': entry['series']},
         my_data)))
@@ -91,7 +86,7 @@ def make_my_data(percapita):
 
 
 def make_chart(my_data):
-    # Section 6 - highchart
+    # highchart를 만드는 함수입니다.
     chart = {
         'chart': {
             'type': 'spline',
@@ -101,11 +96,10 @@ def make_chart(my_data):
         'title': {'text': '인구 대비 COVID-19 확진자 비율'},
         'subtitle': {'text': 'Source: Johns Hopkins University Center for Systems Science and Engineering'},
         'xAxis': {'type': 'datetime',
-                  # 'dateTimeLabelFormats': {'month': '%b \'%y'}
         },
-        'yAxis': [{  # Primary yAxis
+        'yAxis': [{
             'labels': {
-                'format': '{value} 건/십만 명',
+                'format': '{value} 건/백만 명',
                 'style': {'color': 'blue'}
             }, 'title': {
                 'text': '누적 비율',
@@ -118,12 +112,6 @@ def make_chart(my_data):
                 'states': {
                     'hover': {'lineWidth': 5}
                 },
-                # 'marker': {
-                #     'enabled': 'false'
-                # },
-                # 'dataLabels': {
-                #     'enabled': 'False'
-                # },
             }
         },
         'series': list(map(
